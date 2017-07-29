@@ -22,13 +22,14 @@ main =
 
 
 type alias Model =
-    { cats : Cats
+    { flash : String
+    , cats : Cats
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model []
+    ( Model "Fetching cats…" []
     , getCats
     )
 
@@ -47,17 +48,21 @@ type alias Cat =
 
 type Msg
     = AddCat (Result Http.Error String)
+    | Flash String
     | FetchCat
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Flash message ->
+            ( { model | flash = message }, Cmd.none )
+
         FetchCat ->
             ( model, getCats )
 
         AddCat (Ok newPic) ->
-            addCat model newPic "foo"
+            addCat model "fact" newPic
 
         AddCat (Err _) ->
             ( model, Cmd.none )
@@ -80,6 +85,8 @@ view : Model -> Html Msg
 view model =
     div []
         [ h1 [] [ text "Cats" ]
+        , h2 [] [ text model.flash ]
+        , button [ onClick (Flash "you flashed this") ] [ text "Flash a message" ]
         , button [ onClick FetchCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
         ]
