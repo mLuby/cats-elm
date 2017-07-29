@@ -33,7 +33,9 @@ type alias Cat =
 type alias Model =
     { flash : String
     , cats : Cats
-    , dieFace : Int
+    , die1 : Int
+    , die2 : Int
+    , die3 : Int
     }
 
 
@@ -41,7 +43,9 @@ initialModal : Model
 initialModal =
     { flash = "Initializing…"
     , cats = []
-    , dieFace = 1
+    , die1 = 1
+    , die2 = 2
+    , die3 = 3
     }
 
 
@@ -61,7 +65,9 @@ type Msg
     | RequestCat
     | AddCat (Result Http.Error String)
     | Roll
-    | NewFace Int
+    | NewFace1 Int
+    | NewFace2 Int
+    | NewFace3 Int
 
 
 
@@ -84,10 +90,22 @@ update msg model =
             ( model, Cmd.none )
 
         Roll ->
-            ( model, Random.generate NewFace (Random.int 1 6) )
+            ( model
+            , Cmd.batch
+                [ Random.generate NewFace1 (Random.int 1 6)
+                , Random.generate NewFace2 (Random.int 1 6)
+                , Random.generate NewFace3 (Random.int 1 6)
+                ]
+            )
 
-        NewFace newFace ->
-            ( { model | dieFace = newFace }, Cmd.none )
+        NewFace1 newFace ->
+            ( { model | die1 = newFace }, Cmd.none )
+
+        NewFace2 newFace ->
+            ( { model | die2 = newFace }, Cmd.none )
+
+        NewFace3 newFace ->
+            ( { model | die3 = newFace }, Cmd.none )
 
 
 addCat : Model -> Cat -> ( Model, Cmd Msg )
@@ -107,13 +125,13 @@ addCat model cat =
 view : Model -> Html Msg
 view model =
     div []
-        [ h1 [] [ text "Cats" ]
+        [ h2 [] [ text model.flash ]
         , div []
-            [ h1 [] [ text (toString model.dieFace) ]
-            , img [ onClick Roll, src ("https://wpclipart.com/recreation/games/dice/die_face_" ++ (toString model.dieFace) ++ ".png") ] []
-            , button [ onClick Roll ] [ text "Roll" ]
+            [ img [ onClick Roll, src ("https://wpclipart.com/recreation/games/dice/die_face_" ++ (toString model.die1) ++ ".png"), width 50 ] []
+            , img [ onClick Roll, src ("https://wpclipart.com/recreation/games/dice/die_face_" ++ (toString model.die2) ++ ".png"), width 50 ] []
+            , img [ onClick Roll, src ("https://wpclipart.com/recreation/games/dice/die_face_" ++ (toString model.die3) ++ ".png"), width 50 ] []
             ]
-        , h2 [] [ text model.flash ]
+        , h1 [] [ text "Cats" ]
         , button [ onClick (Flash "you flashed this") ] [ text "Flash a message" ]
         , button [ onClick RequestCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
