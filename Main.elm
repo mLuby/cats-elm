@@ -17,8 +17,16 @@ main =
         }
 
 
+type alias Cats =
+    List Cat
 
--- MODEL
+
+type alias Cat =
+    { fact : String, pic : String }
+
+
+
+-- Redux state = Elm model.
 
 
 type alias Model =
@@ -35,21 +43,17 @@ init =
 
 
 
--- UPDATE
-
-
-type alias Cats =
-    List Cat
-
-
-type alias Cat =
-    { fact : String, pic : String }
+-- Redux actions = Elm Msg. Types specifiy actions and their payloads (if any).
 
 
 type Msg
     = Flash String
     | RequestCat
     | AddCat (Result Http.Error String)
+
+
+
+-- Redux root reducer = Elm update. Note Elm runs side effects BEFORE/AFTER?, called Commands)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -61,29 +65,25 @@ update msg model =
         RequestCat ->
             ( { model | flash = "Requesting cat…" }, getCat )
 
-        AddCat (Ok newPic) ->
-            addCat model "fact" newPic
+        AddCat (Ok str) ->
+            addCat model { pic = str, fact = "foo" }
 
         AddCat (Err _) ->
             ( model, Cmd.none )
 
 
-addCat : Model -> String -> String -> ( Model, Cmd Msg )
-addCat model newFact newPic =
-    let
-        newCat =
-            { fact = newFact, pic = newPic }
-    in
-        ( { model
-            | cats = model.cats ++ [ newCat ]
-            , flash = "Success!"
-          }
-        , Cmd.none
-        )
+addCat : Model -> Cat -> ( Model, Cmd Msg )
+addCat model cat =
+    ( { model
+        | cats = model.cats ++ [ cat ]
+        , flash = "Success!"
+      }
+    , Cmd.none
+    )
 
 
 
--- VIEW
+-- React = Elm view.
 
 
 view : Model -> Html Msg
