@@ -10,7 +10,7 @@ import Json.Decode as Decode
 main : Program Never Model Msg
 main =
     Html.program
-        { init = init "cats"
+        { init = init
         , view = view
         , update = update
         , subscriptions = subscriptions
@@ -22,16 +22,15 @@ main =
 
 
 type alias Model =
-    { topic : String
-    , pic : String
+    { pic : String
     , fact : String
     }
 
 
-init : String -> ( Model, Cmd Msg )
-init topic =
-    ( Model topic "waiting.gif" "<cat fact>"
-    , getPic topic
+init : ( Model, Cmd Msg )
+init =
+    ( Model "" ""
+    , getPicAndFact
     )
 
 
@@ -45,11 +44,16 @@ type Msg
     | NewFact (Result Http.Error String)
 
 
+
+-- | NewPic (Result Http.Error String)
+-- | NewFact (Result Http.Error String)
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         MorePlease ->
-            ( model, getPic model.topic )
+            ( model, getPicAndFact )
 
         NewPic (Ok newPic) ->
             ( { model | pic = newPic }, Cmd.none )
@@ -58,7 +62,7 @@ update msg model =
             ( model, Cmd.none )
 
         NewFact (Ok newFact) ->
-            ( model, Cmd.none )
+            ( { model | fact = newFact }, Cmd.none )
 
         NewFact (Err _) ->
             ( model, Cmd.none )
@@ -71,7 +75,7 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ h2 [] [ text model.topic ]
+        [ h2 [] [ text "Cats" ]
         , button [ onClick MorePlease ] [ text "More Purrease!" ]
         , br [] []
         , img [ src model.pic ] []
@@ -91,16 +95,42 @@ subscriptions model =
 
 
 -- HTTP
--- https://catfact.ninja/fact
 
 
-getPic : String -> Cmd Msg
-getPic topic =
-    let
-        url =
-            "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
-    in
-        Http.send NewPic (Http.get url decodePic)
+getPicAndFact : Cmd Msg
+getPicAndFact =
+    Cmd.batch [ getPic, getFact ]
+
+
+getPic : Cmd Msg
+getPic =
+    Http.send NewPic picRequest
+
+
+getFact : Cmd Msg
+getFact =
+    Http.send NewFact factRequest
+
+
+picRequest : Http.Request String
+picRequest =
+    Http.get "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats" decodePic
+
+
+factRequest : Http.Request String
+factRequest =
+    Http.get "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats" decodeFact
+
+
+
+-- Http.get "https://api.flickr.com/services/rest/?&method=flickr.people.getPublicPhotos&format=json&api_key=6f93d9bd5fef5831ec592f0b527fdeff&user_id=9395899@N08" decodeFact
+-- getFact : Cmd Msg
+-- getFact =
+--     let
+--         url =
+--             "https://catfact.ninja/fact"
+--     in
+--         Http.send NewPicAndFact (Http.get url decodeFact)
 
 
 decodePic : Decode.Decoder String
@@ -108,15 +138,6 @@ decodePic =
     Decode.at [ "data", "image_url" ] Decode.string
 
 
-getFact : String -> Cmd Msg
-getFact topic =
-    let
-        url =
-            "https://catfact.ninja/fact"
-    in
-        Http.send NewFact (Http.get url decodeFact)
-
-
 decodeFact : Decode.Decoder String
 decodeFact =
-    Decode.at [ "fact" ] Decode.string
+    Decode.at [ "data", "id" ] Decode.string
