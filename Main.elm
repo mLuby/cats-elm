@@ -2,7 +2,6 @@ module Cats exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
 
@@ -22,15 +21,14 @@ main =
 
 
 type alias Model =
-    { pic : String
-    , fact : String
+    { cats : Cats
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model "" ""
-    , getPicAndFact
+    ( Model []
+    , getCats
     )
 
 
@@ -38,34 +36,35 @@ init =
 -- UPDATE
 
 
+type alias Cats =
+    List Cat
+
+
+type alias Cat =
+    { fact : String, pic : String }
+
+
 type Msg
-    = MorePlease
-    | NewPic (Result Http.Error String)
-    | NewFact (Result Http.Error String)
-
-
-
--- | NewPic (Result Http.Error String)
--- | NewFact (Result Http.Error String)
+    = AddCat (Result Http.Error String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        MorePlease ->
-            ( model, getPicAndFact )
+        AddCat (Ok newPic) ->
+            addCat model newPic "foo"
 
-        NewPic (Ok newPic) ->
-            ( { model | pic = newPic }, Cmd.none )
-
-        NewPic (Err _) ->
+        AddCat (Err _) ->
             ( model, Cmd.none )
 
-        NewFact (Ok newFact) ->
-            ( { model | fact = newFact }, Cmd.none )
 
-        NewFact (Err _) ->
-            ( model, Cmd.none )
+addCat : Model -> String -> String -> ( Model, Cmd Msg )
+addCat model newFact newPic =
+    let
+        newCat =
+            { fact = newFact, pic = newPic }
+    in
+        ( { model | cats = model.cats ++ [ newCat ] }, Cmd.none )
 
 
 
@@ -75,12 +74,21 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ h2 [] [ text "Cats" ]
-        , button [ onClick MorePlease ] [ text "More Purrease!" ]
-        , br [] []
-        , img [ src model.pic ] []
-        , br [] []
-        , span [] [ text model.fact ]
+        [ h1 [] [ text "Cats" ]
+        , (renderCats model.cats)
+        ]
+
+
+renderCats : Cats -> Html Msg
+renderCats cats =
+    ul [] (List.map renderCat cats)
+
+
+renderCat : Cat -> Html Msg
+renderCat cat =
+    li []
+        [ img [ src cat.pic ] []
+        , span [] [ text cat.fact ]
         ]
 
 
@@ -97,6 +105,11 @@ subscriptions model =
 -- HTTP
 
 
+getCats : Cmd Msg
+getCats =
+    Cmd.batch [ getPic, getFact ]
+
+
 getPicAndFact : Cmd Msg
 getPicAndFact =
     Cmd.batch [ getPic, getFact ]
@@ -104,12 +117,12 @@ getPicAndFact =
 
 getPic : Cmd Msg
 getPic =
-    Http.send NewPic picRequest
+    Http.send AddCat picRequest
 
 
 getFact : Cmd Msg
 getFact =
-    Http.send NewFact factRequest
+    Http.send AddCat factRequest
 
 
 picRequest : Http.Request String
@@ -120,17 +133,6 @@ picRequest =
 factRequest : Http.Request String
 factRequest =
     Http.get "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats" decodeFact
-
-
-
--- Http.get "https://api.flickr.com/services/rest/?&method=flickr.people.getPublicPhotos&format=json&api_key=6f93d9bd5fef5831ec592f0b527fdeff&user_id=9395899@N08" decodeFact
--- getFact : Cmd Msg
--- getFact =
---     let
---         url =
---             "https://catfact.ninja/fact"
---     in
---         Http.send NewPicAndFact (Http.get url decodeFact)
 
 
 decodePic : Decode.Decoder String
