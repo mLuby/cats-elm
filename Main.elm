@@ -2,6 +2,7 @@ module Cats exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
 
@@ -46,11 +47,15 @@ type alias Cat =
 
 type Msg
     = AddCat (Result Http.Error String)
+    | FetchCat
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        FetchCat ->
+            ( model, getCats )
+
         AddCat (Ok newPic) ->
             addCat model newPic "foo"
 
@@ -75,6 +80,7 @@ view : Model -> Html Msg
 view model =
     div []
         [ h1 [] [ text "Cats" ]
+        , button [ onClick FetchCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
         ]
 
