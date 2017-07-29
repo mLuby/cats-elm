@@ -29,8 +29,8 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model "Fetching cats…" []
-    , getCats
+    ( Model "Initializing…" []
+    , getCat
     )
 
 
@@ -47,9 +47,9 @@ type alias Cat =
 
 
 type Msg
-    = AddCat (Result Http.Error String)
-    | Flash String
-    | FetchCat
+    = Flash String
+    | RequestCat
+    | AddCat (Result Http.Error String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -58,8 +58,8 @@ update msg model =
         Flash message ->
             ( { model | flash = message }, Cmd.none )
 
-        FetchCat ->
-            ( model, getCats )
+        RequestCat ->
+            ( { model | flash = "Requesting cat…" }, getCat )
 
         AddCat (Ok newPic) ->
             addCat model "fact" newPic
@@ -74,7 +74,12 @@ addCat model newFact newPic =
         newCat =
             { fact = newFact, pic = newPic }
     in
-        ( { model | cats = model.cats ++ [ newCat ] }, Cmd.none )
+        ( { model
+            | cats = model.cats ++ [ newCat ]
+            , flash = "Success!"
+          }
+        , Cmd.none
+        )
 
 
 
@@ -87,7 +92,7 @@ view model =
         [ h1 [] [ text "Cats" ]
         , h2 [] [ text model.flash ]
         , button [ onClick (Flash "you flashed this") ] [ text "Flash a message" ]
-        , button [ onClick FetchCat ] [ text "Add Cat" ]
+        , button [ onClick RequestCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
         ]
 
@@ -118,8 +123,8 @@ subscriptions model =
 -- HTTP
 
 
-getCats : Cmd Msg
-getCats =
+getCat : Cmd Msg
+getCat =
     Cmd.batch [ getPic, getFact ]
 
 
