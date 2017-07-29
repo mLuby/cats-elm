@@ -23,14 +23,15 @@ main =
 
 type alias Model =
     { topic : String
-    , gifUrl : String
+    , pic : String
+    , fact : String
     }
 
 
 init : String -> ( Model, Cmd Msg )
 init topic =
-    ( Model topic "waiting.gif"
-    , getRandomGif topic
+    ( Model topic "waiting.gif" "<cat fact>"
+    , getPic topic
     )
 
 
@@ -40,19 +41,26 @@ init topic =
 
 type Msg
     = MorePlease
-    | NewGif (Result Http.Error String)
+    | NewPic (Result Http.Error String)
+    | NewFact (Result Http.Error String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         MorePlease ->
-            ( model, getRandomGif model.topic )
+            ( model, getPic model.topic )
 
-        NewGif (Ok newUrl) ->
-            ( Model model.topic newUrl, Cmd.none )
+        NewPic (Ok newPic) ->
+            ( { model | pic = newPic }, Cmd.none )
 
-        NewGif (Err _) ->
+        NewPic (Err _) ->
+            ( model, Cmd.none )
+
+        NewFact (Ok newFact) ->
+            ( model, Cmd.none )
+
+        NewFact (Err _) ->
             ( model, Cmd.none )
 
 
@@ -66,9 +74,9 @@ view model =
         [ h2 [] [ text model.topic ]
         , button [ onClick MorePlease ] [ text "More Purrease!" ]
         , br [] []
-        , img [ src model.gifUrl ] []
+        , img [ src model.pic ] []
         , br [] []
-        , span [] [ text "a cat fact?" ]
+        , span [] [ text model.fact ]
         ]
 
 
@@ -83,17 +91,32 @@ subscriptions model =
 
 
 -- HTTP
+-- https://catfact.ninja/fact
 
 
-getRandomGif : String -> Cmd Msg
-getRandomGif topic =
+getPic : String -> Cmd Msg
+getPic topic =
     let
         url =
             "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
     in
-        Http.send NewGif (Http.get url decodeGifUrl)
+        Http.send NewPic (Http.get url decodePic)
 
 
-decodeGifUrl : Decode.Decoder String
-decodeGifUrl =
+decodePic : Decode.Decoder String
+decodePic =
     Decode.at [ "data", "image_url" ] Decode.string
+
+
+getFact : String -> Cmd Msg
+getFact topic =
+    let
+        url =
+            "https://catfact.ninja/fact"
+    in
+        Http.send NewFact (Http.get url decodeFact)
+
+
+decodeFact : Decode.Decoder String
+decodeFact =
+    Decode.at [ "fact" ] Decode.string
