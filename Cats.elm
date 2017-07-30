@@ -5,6 +5,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
+import Task
 
 
 main : Program Never Model Msg
@@ -56,11 +57,12 @@ init =
 type Msg
     = Flash String
     | RequestCat
-    | AddCat (Result Http.Error String)
+    | FetchCatFail Http.Error
+    | FetchCatSuccess Cat
 
 
 
--- Redux root reducer = Elm update. Note Elm runs side effects BEFORE/AFTER?, called Commands)
+-- Redux root reducer = Elm update. Note Elm runs side effects ¿BEFORE/AFTER?, called Commands)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -72,11 +74,11 @@ update msg model =
         RequestCat ->
             ( { model | flash = "Requesting cat…" }, getCat )
 
-        AddCat (Ok str) ->
-            addCat model { pic = str, fact = "foo" }
+        FetchCatSuccess cat ->
+            addCat model cat
 
-        AddCat (Err _) ->
-            ( model, Cmd.none )
+        FetchCatFail error ->
+            ( { model | flash = "fetch error" }, Cmd.none )
 
 
 addCat : Model -> Cat -> ( Model, Cmd Msg )
@@ -119,44 +121,38 @@ renderCat cat =
 
 
 -- HTTP
--- getCat : Cmd Msg
--- getCat =
---   Task.perform Flash Cat
---     <| Task.map2 (\fact pic -> { fact = fact, pic = pic })
---         factRequest
---         picRequest
 
 
 getCat : Cmd Msg
 getCat =
-    Cmd.batch [ getPic, getFact ]
+    Task.attempt parseResult
+        (Task.map2
+            (\fact pic -> { fact = fact, pic = pic })
+            (Http.toTask (Http.get factGetUrl factDecoder))
+            (Http.toTask (Http.get picGetUrl picDecoder))
+        )
 
 
-getPic : Cmd Msg
-getPic =
-    Http.send AddCat picRequest
+parseResult result =
+    case result of
+        Ok value ->
+            FetchCatSuccess value
+
+        Err msg ->
+            FetchCatFail msg
 
 
-getFact : Cmd Msg
-getFact =
-    Http.send AddCat factRequest
+factGetUrl =
+    "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats"
 
 
-picRequest : Http.Request String
-picRequest =
-    Http.get "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats" decodePic
-
-
-factRequest : Http.Request String
-factRequest =
-    Http.get "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats" decodeFact
-
-
-decodePic : Decode.Decoder String
-decodePic =
-    Decode.at [ "data", "image_url" ] Decode.string
-
-
-decodeFact : Decode.Decoder String
-decodeFact =
+factDecoder =
     Decode.at [ "data", "id" ] Decode.string
+
+
+picGetUrl =
+    "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats"
+
+
+picDecoder =
+    Decode.at [ "data", "image_url" ] Decode.string

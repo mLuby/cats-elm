@@ -40,7 +40,8 @@ init =
 
 type Msg
     = Roll
-    | NewFaces List Int
+    | NewFace1 Int
+    | NewFace2 Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -48,17 +49,30 @@ update msg model =
     case msg of
         Roll ->
             ( model
-            , Cmd.batch (
-                  List.map rollDie model.dice
-              )
+            , Cmd.batch
+                [ (Random.generate (NewFace1) (Random.int 1 6))
+                , (Random.generate (NewFace2) (Random.int 1 6))
+                ]
             )
 
-        NewFaces newFaces ->
-            ( { model | dice = newFaces }, Cmd.none )
+        NewFace1 newFace ->
+            ( { model | dice = (setListIndex 0 newFace model.dice) }, Cmd.none )
 
-rollDie : Cmd msg
-rollDie =
-  Random.generate NewFaces (Random.int 1 6)
+        NewFace2 newFace ->
+            ( { model | dice = (setListIndex 1 newFace model.dice) }, Cmd.none )
+
+
+setListIndex : Int -> a -> List a -> List a
+setListIndex index newVal =
+    List.indexedMap
+        (\i oldVal ->
+            if index == i then
+                newVal
+            else
+                oldVal
+        )
+
+
 
 -- VIEW
 
