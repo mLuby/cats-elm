@@ -6,13 +6,12 @@ import Html.Events exposing (onClick)
 import Http
 import Json.Decode as Decode
 import Task
-import Debug exposing (log)
 
 
 main : Program Never Model Msg
 main =
     Html.program
-        { init = { values = [], partialValues = [] } ! [ getValues ]
+        { init = { flash = "starting", values = [], partialValues = [] } ! [ getValues ]
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none
@@ -24,7 +23,8 @@ main =
 
 
 type alias Model =
-    { values : List String
+    { flash : String
+    , values : List String
     , partialValues : List String
     }
 
@@ -36,7 +36,8 @@ type alias Model =
 view : Model -> Html Msg
 view model =
     div []
-        [ button [ onClick Request ] [ text "add img" ]
+        [ div [] [ text model.flash ]
+        , button [ onClick Request ] [ text "add img" ]
         , div [] (List.map (\v -> img [ src v, height 50 ] []) model.values)
         ]
 
@@ -56,13 +57,13 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Request ->
-            model ! [ getValues ]
+            { model | flash = "requesting" } ! [ getValues ]
 
         Success values ->
-            { model | values = model.values ++ values } ! []
+            { model | flash = "success", values = model.values ++ values } ! []
 
         Error msg ->
-            model ! []
+            { model | flash = errorMapper msg } ! []
 
         PartialSuccess updater ->
             updater model
@@ -70,7 +71,7 @@ update msg model =
 
 getValues : Cmd Msg
 getValues =
-    parallelize requestTasks
+    parallelize parseHttpResults requestTasks
 
 
 requestTasks : List (Task.Task Http.Error String)
@@ -90,8 +91,28 @@ request searchTerm =
         (Decode.at [ "data", "image_url" ] Decode.string)
 
 
-parseHttpResult : Result Http.Error (List String) -> Msg
-parseHttpResult result =
+errorMapper : Http.Error -> String
+errorMapper error =
+    "Http Error: "
+        ++ case error of
+            Http.BadUrl s ->
+                "you did not provide a valid URL" ++ s
+
+            Http.Timeout ->
+                "it took too long to get a response"
+
+            Http.NetworkError ->
+                "the user turned off their wifi, went in a cave, etc"
+
+            Http.BadStatus _ ->
+                "got a response back, but the status code indicates failure"
+
+            Http.BadPayload s _ ->
+                "got a response back with a nice status code, but the body of the response was something unexpected" ++ s
+
+
+parseHttpResults : Result Http.Error (List String) -> Msg
+parseHttpResults result =
     case result of
         Ok values ->
             Success values
@@ -102,32 +123,35 @@ parseHttpResult result =
 
 
 -- Parallelize
+-- TODO make sure results in same order as corresponding tasks.
 
-
-parallelize : List (Task.Task Http.Error String) -> Cmd Msg
-parallelize tasks =
+parallelize :
+    (Result a (List String) -> Msg)
+    -> List (Task.Task a String)
+    -> Cmd Msg
+parallelize taskForker tasks =
     Cmd.batch
-        (List.map
-            (Task.attempt
-                (\result ->
-                    case result of
-                        Ok value ->
-                            PartialSuccess (\model -> partialSuccessUpdater value model)
+        (List.indexedMap
+            (\index task ->
+                Task.attempt
+                    (\result ->
+                        case result of
+                            Ok value ->
+                                PartialSuccess
+                                    (\model ->
+                                        if (allFinished tasks model.partialValues) then
+                                            ( { model | partialValues = [] }, cmdSuccess taskForker (model.partialValues ++ [ value ]) )
+                                        else
+                                            ( { model | partialValues = model.partialValues ++ [ value ] }, Cmd.none )
+                                    )
 
-                        Err msg ->
-                            Error msg
-                )
+                            Err msg ->
+                                taskForker (Result.Err msg)
+                    )
+                    task
             )
             tasks
         )
-
-
-partialSuccessUpdater : String -> Model -> ( Model, Cmd Msg )
-partialSuccessUpdater value model =
-    if (allFinished requests model.partialValues) then
-        ( { model | partialValues = [] }, cmdSuccess (model.partialValues ++ [ value ]) )
-    else
-        ( { model | partialValues = model.partialValues ++ [ value ] }, Cmd.none )
 
 
 allFinished : List a -> List b -> Bool
@@ -135,6 +159,6 @@ allFinished tasks partialValues =
     List.length tasks == List.length partialValues + 1
 
 
-cmdSuccess : List String -> Cmd Msg
-cmdSuccess values =
-    Task.perform Success (Task.succeed values)
+cmdSuccess : (Result error a -> Msg) -> a -> Cmd Msg
+cmdSuccess taskForker values =
+    Task.perform (\_ -> taskForker (Result.Ok values)) (Task.succeed values)
