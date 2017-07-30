@@ -26,7 +26,7 @@ type alias Model =
 
 initialModal : Model
 initialModal =
-    { dice = [ 4, 2 ] }
+    { dice = [ 1, 2, 3, 4, 5, 6 ] }
 
 
 init : ( Model, Cmd Msg )
@@ -40,30 +40,26 @@ init =
 
 type Msg
     = Roll
-    | NewFace1 Int
-    | NewFace2 Int
+    | NewFaceForIndex Int Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Roll ->
-            ( model
-            , Cmd.batch
-                [ (Random.generate (NewFace1) (Random.int 1 6))
-                , (Random.generate (NewFace2) (Random.int 1 6))
-                ]
-            )
+            model ! (List.indexedMap generateRandomFace model.dice)
 
-        NewFace1 newFace ->
-            ( { model | dice = (setListIndex 0 newFace model.dice) }, Cmd.none )
-
-        NewFace2 newFace ->
-            ( { model | dice = (setListIndex 1 newFace model.dice) }, Cmd.none )
+        NewFaceForIndex index newFace ->
+            { model | dice = (setValueAtIndex newFace index model.dice) } ! []
 
 
-setListIndex : Int -> a -> List a -> List a
-setListIndex index newVal =
+generateRandomFace : Int -> a -> Cmd Msg
+generateRandomFace index _ =
+    Random.generate (NewFaceForIndex index) (Random.int 1 6)
+
+
+setValueAtIndex : a -> Int -> List a -> List a
+setValueAtIndex newVal index =
     List.indexedMap
         (\i oldVal ->
             if index == i then
@@ -74,7 +70,7 @@ setListIndex index newVal =
 
 
 
--- VIEW
+-- View
 
 
 view : Model -> Html Msg
