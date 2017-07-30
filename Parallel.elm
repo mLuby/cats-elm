@@ -30,12 +30,24 @@ type alias Model =
 
 
 
+-- View
+
+
+view : Model -> Html Msg
+view model =
+    div []
+        [ button [ onClick Request ] [ text "add img" ]
+        , div [] (List.map (\v -> img [ src v, height 50 ] []) model.values)
+        ]
+
+
+
 -- Update
 
 
 type Msg
     = Request
-    | Success (List String) -- List a
+    | Success (List String)
     | PartialSuccess (Model -> ( Model, Cmd Msg ))
     | Error Http.Error
 
@@ -49,71 +61,33 @@ update msg model =
         Success values ->
             { model | values = model.values ++ values } ! []
 
-        PartialSuccess updater ->
-            updater model
-
         Error msg ->
             model ! []
 
-
-
--- getValues : String -> Cmd Msg
--- getValues searchTerm =
---     Task.attempt parseHttpResult (Task.sequence requests)
--- getValues searchTerm =
---     Task.attempt parseHttpResult (request searchTerm)
+        PartialSuccess updater ->
+            updater model
 
 
 getValues : Cmd Msg
 getValues =
-    Cmd.batch
-        (List.map
-            (\requestTask ->
-                Task.attempt
-                    (\result ->
-                        case result of
-                            Ok value ->
-                                PartialSuccess (\model -> partialSuccessUpdater value model)
-
-                            Err msg ->
-                                Error msg
-                    )
-                    requestTask
-            )
-            requests
-        )
+    parallelize requestTasks
 
 
-partialSuccessUpdater : String -> Model -> ( Model, Cmd Msg )
-partialSuccessUpdater value model =
-    if ((List.length requests) - 1) == (List.length model.partialValues) then
-        log "foo" ( { model | partialValues = [] }, cmdSuccess (model.partialValues ++ [ value ]) )
-    else
-        log "bar" ( { model | partialValues = model.partialValues ++ [ value ] }, Cmd.none )
+requestTasks : List (Task.Task Http.Error String)
+requestTasks =
+    List.map Http.toTask requests
 
 
-cmdSuccess : List String -> Cmd Msg
-cmdSuccess values =
-    Task.perform Success (Task.succeed values)
-
-
-requests : List (Task.Task Http.Error String)
+requests : List (Http.Request String)
 requests =
     List.map request [ "explosion", "rainbow", "ocean" ]
 
 
-
--- merge = first => second => third => fold (\(index,value) -> "order to index")[first,second,third]
--- all([f, f, f]) -> (1,"b") (0,"a") (2,"c") -> ["a", "b", "c"]
-
-
-request : String -> Task.Task Http.Error String
+request : String -> Http.Request String
 request searchTerm =
-    Http.toTask
-        (Http.get
-            ("https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ searchTerm)
-            (Decode.at [ "data", "image_url" ] Decode.string)
-        )
+    Http.get
+        ("https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ searchTerm)
+        (Decode.at [ "data", "image_url" ] Decode.string)
 
 
 parseHttpResult : Result Http.Error (List String) -> Msg
@@ -127,23 +101,40 @@ parseHttpResult result =
 
 
 
--- need external-reference closure or shareable partial function application
--- need to know results taskIndex tasksLength
--- if Error then Task.fail result
--- if Ok then add value to results by task index
--- if length results == tasksLength then Task.succeed results
--- if Error then Task.fail result
--- if Ok then add value to results by task index
--- if length results == tasksLength then Task.succeed results
--- when given tasks, create func for them to call on completion to see if done
--- return task that'll
--- each task when attempted results in Ok or Err
--- View
+-- Parallelize
 
 
-view : Model -> Html Msg
-view model =
-    div []
-        [ button [ onClick Request ] [ text "add img" ]
-        , div [] (List.map (\v -> img [ src v, height 50 ] []) model.values)
-        ]
+parallelize : List (Task.Task Http.Error String) -> Cmd Msg
+parallelize tasks =
+    Cmd.batch
+        (List.map
+            (Task.attempt
+                (\result ->
+                    case result of
+                        Ok value ->
+                            PartialSuccess (\model -> partialSuccessUpdater value model)
+
+                        Err msg ->
+                            Error msg
+                )
+            )
+            tasks
+        )
+
+
+partialSuccessUpdater : String -> Model -> ( Model, Cmd Msg )
+partialSuccessUpdater value model =
+    if (allFinished requests model.partialValues) then
+        ( { model | partialValues = [] }, cmdSuccess (model.partialValues ++ [ value ]) )
+    else
+        ( { model | partialValues = model.partialValues ++ [ value ] }, Cmd.none )
+
+
+allFinished : List a -> List b -> Bool
+allFinished tasks partialValues =
+    List.length tasks == List.length partialValues + 1
+
+
+cmdSuccess : List String -> Cmd Msg
+cmdSuccess values =
+    Task.perform Success (Task.succeed values)
