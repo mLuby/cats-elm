@@ -1,21 +1,37 @@
 module Cats exposing (..)
 
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.Events exposing (..)
+import Html exposing (div, h1, button, li, ul, text, Html, span, h2, img)
+import Html.Attributes exposing (hidden, src, height)
+import Html.Events exposing (onClick)
 import Http
 import Json.Decode as Decode
 import Task
+import List exposing (map, length, range)
+
+
+-- EDIT: see http://package.elm-lang.org/packages/NoRedInk/elm-task-extra/2.0.0/Task-Extra#parallel
+-- Achieves parallelism by creating empty cat then filling it in.
+-- stillLoading counter = number of requests,
+-- start requests pointing to cat (index?)
+-- when each request returns, it fills in part of cat and decrements counter
+-- could skip the counter and check vals if you know they must all not be
+-- if some requests are optional, they don't have to decrement.
+-- pass updater function to update to run against cats. map over cats, find id, fill in value.
 
 
 main : Program Never Model Msg
 main =
     Html.program
-        { init = ( initialModal, Cmd.batch [ getCat 0, getCat 1 ] )
+        { init = ( initialModal, Cmd.batch (List.indexedMap (\id _ -> getCat id) initialModal.cats) )
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none
         }
+
+
+numCatsToStart : Int
+numCatsToStart =
+    2
 
 
 
@@ -31,7 +47,7 @@ type alias Model =
 initialModal : Model
 initialModal =
     { flash = "Initializing…"
-    , cats = [ createCat 0 2, createCat 1 2 ]
+    , cats = range 0 (numCatsToStart - 1) |> map (createCat numSubRequests)
     }
 
 
@@ -61,7 +77,7 @@ update msg model =
             ( { model | flash = message }, Cmd.none )
 
         RequestParallelCat ->
-            ( { model | flash = "Requesting parallel cat…" }, Cmd.none )
+            ( { model | cats = model.cats ++ [ createCat numSubRequests (nextIndex model.cats) ], flash = "Requesting parallel cat…" }, getCat (nextIndex model.cats) )
 
         ReceivePartialCat catUpdater ->
             ( { model | cats = List.map catUpdater model.cats }, Cmd.none )
@@ -70,9 +86,16 @@ update msg model =
             ( { model | flash = "fetch error" }, Cmd.none )
 
 
-createCat : a -> b -> { fact : String, id : a, pic : String, stillLoading : b }
-createCat catId requiredRequestCount =
-    { id = catId, stillLoading = requiredRequestCount, fact = "", pic = "" }
+createCat : Int -> Int -> Cat
+createCat requiredRequestCount id =
+    { id = id, stillLoading = requiredRequestCount, fact = "", pic = "" }
+
+
+nextIndex : List a -> Int
+nextIndex list =
+    list
+        |> List.length
+        |> (+) 1
 
 
 
@@ -82,8 +105,8 @@ createCat catId requiredRequestCount =
 view : Model -> Html Msg
 view model =
     div []
-        [ h2 [] [ text model.flash ]
-        , h1 [] [ text "Cats" ]
+        [ h1 [] [ text "Cats" ]
+        , h2 [] [ text model.flash ]
         , button [ onClick (Flash "you flashed this") ] [ text "Flash a message" ]
         , button [ onClick RequestParallelCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
@@ -98,7 +121,7 @@ renderCats cats =
 renderCat : Cat -> Html Msg
 renderCat cat =
     li [ hidden (cat.stillLoading > 0) ]
-        [ img [ src cat.pic ] []
+        [ img [ src cat.pic, height 50 ] []
         , span [] [ text cat.fact ]
         ]
 
@@ -109,7 +132,21 @@ renderCat cat =
 
 getCat : Int -> Cmd Msg
 getCat catId =
-    Cmd.batch [ getCatFact catId, getCatPic catId ]
+    Cmd.batch (map (\req -> req catId) subRequests)
+
+
+
+-- Want to apply the id to each element but Elm has no apply.
+
+
+numSubRequests : Int
+numSubRequests =
+    length subRequests
+
+
+subRequests : List (Int -> Cmd Msg)
+subRequests =
+    [ getCatFact, getCatPic ]
 
 
 getCatFact : Int -> Cmd Msg
