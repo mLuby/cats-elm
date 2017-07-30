@@ -11,19 +11,11 @@ import Task
 main : Program Never Model Msg
 main =
     Html.program
-        { init = init
+        { init = ( initialModal, Cmd.batch [ getCat 0, getCat 1 ] )
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none
         }
-
-
-type alias Cats =
-    List Cat
-
-
-type alias Cat =
-    { fact : String, pic : String }
 
 
 
@@ -32,22 +24,19 @@ type alias Cat =
 
 type alias Model =
     { flash : String
-    , cats : Cats
+    , cats : List Cat
     }
 
 
 initialModal : Model
 initialModal =
     { flash = "Initializing…"
-    , cats = []
+    , cats = [ createCat 0 2, createCat 1 2 ]
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( initialModal
-    , Cmd.batch [ getCat, getCat ]
-    )
+type alias Cat =
+    { id : Int, stillLoading : Int, fact : String, pic : String }
 
 
 
@@ -56,9 +45,9 @@ init =
 
 type Msg
     = Flash String
-    | RequestCat
+    | RequestParallelCat
+    | ReceivePartialCat (Cat -> Cat)
     | FetchCatFail Http.Error
-    | FetchCatSuccess Cat
 
 
 
@@ -71,28 +60,23 @@ update msg model =
         Flash message ->
             ( { model | flash = message }, Cmd.none )
 
-        RequestCat ->
-            ( { model | flash = "Requesting cat…" }, getCat )
+        RequestParallelCat ->
+            ( { model | flash = "Requesting parallel cat…" }, Cmd.none )
 
-        FetchCatSuccess cat ->
-            addCat model cat
+        ReceivePartialCat catUpdater ->
+            ( { model | cats = List.map catUpdater model.cats }, Cmd.none )
 
         FetchCatFail error ->
             ( { model | flash = "fetch error" }, Cmd.none )
 
 
-addCat : Model -> Cat -> ( Model, Cmd Msg )
-addCat model cat =
-    ( { model
-        | cats = model.cats ++ [ cat ]
-        , flash = "Success!"
-      }
-    , Cmd.none
-    )
+createCat : a -> b -> { fact : String, id : a, pic : String, stillLoading : b }
+createCat catId requiredRequestCount =
+    { id = catId, stillLoading = requiredRequestCount, fact = "", pic = "" }
 
 
 
--- React = Elm view.
+-- React render = Elm view.
 
 
 view : Model -> Html Msg
@@ -101,19 +85,19 @@ view model =
         [ h2 [] [ text model.flash ]
         , h1 [] [ text "Cats" ]
         , button [ onClick (Flash "you flashed this") ] [ text "Flash a message" ]
-        , button [ onClick RequestCat ] [ text "Add Cat" ]
+        , button [ onClick RequestParallelCat ] [ text "Add Cat" ]
         , (renderCats model.cats)
         ]
 
 
-renderCats : Cats -> Html Msg
+renderCats : List Cat -> Html Msg
 renderCats cats =
     ul [] (List.map renderCat cats)
 
 
 renderCat : Cat -> Html Msg
 renderCat cat =
-    li []
+    li [ hidden (cat.stillLoading > 0) ]
         [ img [ src cat.pic ] []
         , span [] [ text cat.fact ]
         ]
@@ -123,36 +107,71 @@ renderCat cat =
 -- HTTP
 
 
-getCat : Cmd Msg
-getCat =
-    Task.attempt parseResult
-        (Task.map2
-            (\fact pic -> { fact = fact, pic = pic })
-            (Http.toTask (Http.get factGetUrl factDecoder))
-            (Http.toTask (Http.get picGetUrl picDecoder))
+getCat : Int -> Cmd Msg
+getCat catId =
+    Cmd.batch [ getCatFact catId, getCatPic catId ]
+
+
+getCatFact : Int -> Cmd Msg
+getCatFact catId =
+    Task.attempt parseHttpResult
+        (Task.map
+            (\fact ->
+                (\cat ->
+                    if cat.id == catId then
+                        { cat
+                            | fact = fact
+                            , stillLoading = cat.stillLoading - 1
+                        }
+                    else
+                        cat
+                )
+            )
+            (Http.toTask (Http.get factUrl factDecoder))
         )
 
 
-parseResult result =
+getCatPic : Int -> Cmd Msg
+getCatPic catId =
+    Task.attempt parseHttpResult
+        (Task.map
+            (\pic ->
+                (\cat ->
+                    if cat.id == catId then
+                        { cat | pic = pic, stillLoading = cat.stillLoading - 1 }
+                    else
+                        cat
+                )
+            )
+            (Http.toTask (Http.get picUrl picDecoder))
+        )
+
+
+parseHttpResult : Result Http.Error (Cat -> Cat) -> Msg
+parseHttpResult result =
     case result of
-        Ok value ->
-            FetchCatSuccess value
+        Ok catUpdater ->
+            ReceivePartialCat catUpdater
 
         Err msg ->
             FetchCatFail msg
 
 
-factGetUrl =
+factUrl : String
+factUrl =
     "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats"
 
 
+factDecoder : Decode.Decoder String
 factDecoder =
     Decode.at [ "data", "id" ] Decode.string
 
 
-picGetUrl =
+picUrl : String
+picUrl =
     "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=cats"
 
 
+picDecoder : Decode.Decoder String
 picDecoder =
     Decode.at [ "data", "image_url" ] Decode.string
